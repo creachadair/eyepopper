@@ -1,9 +1,32 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 ##
 ## Name:     eyepopper.py
 ## Purpose:  Simple mailbox-to-POP3 gateway.
 ##
-
+## Copyright © 2002 Michael J. Fromberger.  All rights reserved.
+##
+## Redistribution and use in source and binary forms, with or without
+## modification, are permitted provided that the following conditions are met:
+##
+## 1. Redistributions of source code must retain the above copyright notice, this
+##    list of conditions and the following disclaimer.
+## 2. Redistributions in binary form must reproduce the above copyright notice,
+##    this list of conditions and the following disclaimer in the documentation
+##    and/or other materials provided with the distribution.
+##
+## THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+## AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+## IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+## ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+## LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+## CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+## SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+## INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+## CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+## ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+## POSSIBILITY OF SUCH DAMAGE.
+##
 from __future__ import with_statement
 
 from SocketServer import TCPServer, StreamRequestHandler
@@ -11,7 +34,6 @@ import getopt, hashlib, os, random, re, socket, sys, time
 
 __version__ = "1.4"
 
-# {{ class MessageBase
 
 class MessageBase (object):
     """Base class representing a message stored in a Unix mailbox file.
@@ -67,9 +89,6 @@ class MessageBase (object):
     body    = property(get_body, None, None,
                        "Return the body of the message.")
 
-# }}
-
-# {{ class MailContainer
 
 class MailContainer (object):
     """Abstracts a Maildir mailbox stored on disk."""
@@ -100,9 +119,6 @@ class MailContainer (object):
         """Return the total size of the mailbox in octets."""
         return sum(m.poplen for m in self._msgs)
 
-# }}
-
-# {{ class MailboxFile
 
 class MailboxFile (MailContainer):
     """Abstracts a Unix mailbox file stored on disk."""
@@ -129,9 +145,6 @@ class MailboxFile (MailContainer):
                               for m in msgs)
             self._data = data
 
-# }}
-
-# {{ class Maildir
 
 class Maildir (MailContainer):
     """Abstracts a Maildir mailbox in a directory.
@@ -155,9 +168,6 @@ class Maildir (MailContainer):
 
         self._msgs = msgs
 
-# }}
-
-# {{ class POP3Server
 
 class POP3Server (TCPServer):
     """Implements a simple read-only POP3 server."""
@@ -300,17 +310,11 @@ class POP3Server (TCPServer):
         """[client] Return APOP challenge banner."""
         return self._apopc
 
-# }}
-
-# {{ class StateError
 
 class StateError (Exception):
     """An exception used internally by POP3Handler."""
     pass
 
-# }}
-
-# {{ class POP3Handler
 
 class POP3Handler (StreamRequestHandler):
     """Implements a very simple POP3 service.
@@ -567,9 +571,6 @@ class POP3Handler (StreamRequestHandler):
         self.wfile.close()
         self.rfile.close()
 
-# }}
-
-# {{ main(argv)
 
 def main(argv):
     def usage(short = True):
@@ -687,7 +688,6 @@ delimited by carriage returns.
 
     return 0
 
-# }}
 
 if __name__ == "__main__":
     res = main(sys.argv[1:])
