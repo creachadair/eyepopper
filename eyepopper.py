@@ -35,7 +35,7 @@ import getopt, hashlib, os, random, re, socket, sys, time
 __version__ = "1.4"
 
 
-class MessageBase (object):
+class MessageBase(object):
     """Base class representing a message stored in a Unix mailbox file.
     Subclasses must override:
 
@@ -53,8 +53,8 @@ class MessageBase (object):
     .body     -- the body of the message (computed)
     """
     def __init__(self, start, end):
-        self.start  = start
-        self.end    = end
+        self.start = start
+        self.end = end
 
         text = self._data[start:end]
         self.poplen = (end - start) + len(re.findall(r'\n', text))
@@ -65,14 +65,17 @@ class MessageBase (object):
         hash.update(text)
         hash.update(self._path)
 
-        self.uid    = hash.hexdigest()
+        self.uid = hash.hexdigest()
 
     def get_content(self):
-        return self._data[self.start : self.end]
+        return self._data[self.start:self.end]
+
     def get_head(self):
-        return self._data[self.start : self.bodypos]
+        return self._data[self.start:self.bodypos]
+
     def get_body(self):
-        return self._data[self.bodypos : self.end]
+        return self._data[self.bodypos:self.end]
+
     def get_top(self, n):
         """As .get_content(), but return at most n lines from the
         beginning of the message body, n >= 0.
@@ -84,13 +87,11 @@ class MessageBase (object):
 
     content = property(get_content, None, None,
                        "Return the complete content of the message.")
-    head    = property(get_head, None, None,
-                       "Return the headers of the message.")
-    body    = property(get_body, None, None,
-                       "Return the body of the message.")
+    head = property(get_head, None, None, "Return the headers of the message.")
+    body = property(get_body, None, None, "Return the body of the message.")
 
 
-class MailContainer (object):
+class MailContainer(object):
     """Abstracts a Maildir mailbox stored on disk."""
     def __init__(self, path):
         """Constructs a new mailbox abstraction around the given
@@ -120,7 +121,7 @@ class MailContainer (object):
         return sum(m.poplen for m in self._msgs)
 
 
-class MailboxFile (MailContainer):
+class MailboxFile(MailContainer):
     """Abstracts a Unix mailbox file stored on disk."""
     def build_index(self):
         """Construct an index of the contents of the associated disk file."""
@@ -128,11 +129,11 @@ class MailboxFile (MailContainer):
         with file(self._path, 'rt') as fp:
             data = fp.read()
 
-            class Message (MessageBase):
+            class Message(MessageBase):
                 _data = data
                 _path = self._path
 
-            msgs = [{}] # sentinel
+            msgs = [{}]  # sentinel
 
             for msg in ex.finditer(data):
                 msgs[-1]['end'] = msg.start() - 1
@@ -141,19 +142,18 @@ class MailboxFile (MailContainer):
             msgs[-1]['end'] = len(data)
             msgs.pop(0)
 
-            self._msgs = list(Message(m['start'], m['end'])
-                              for m in msgs)
+            self._msgs = list(Message(m['start'], m['end']) for m in msgs)
             self._data = data
 
 
-class Maildir (MailContainer):
+class Maildir(MailContainer):
     """Abstracts a Maildir mailbox in a directory.
     """
     def build_index(self):
         cdir = os.path.join(self._path, 'cur')
         ndir = os.path.join(self._path, 'new')
 
-        class Message (MessageBase):
+        class Message(MessageBase):
             def __init__(self, data, path):
                 self._data = data
                 self._path = path
@@ -169,7 +169,7 @@ class Maildir (MailContainer):
         self._msgs = msgs
 
 
-class POP3Server (TCPServer):
+class POP3Server(TCPServer):
     """Implements a simple read-only POP3 server."""
     allow_reuse_address = True
     capabilities = ['TOP', 'USER', 'UIDL']
@@ -184,18 +184,17 @@ class POP3Server (TCPServer):
         allow_apop   -- allow APOP authentication?
         """
         self._debug = opts.get('debug', False)
-        self._host  = 'localhost'
-        self._port  = port
+        self._host = 'localhost'
+        self._port = port
         self._boxes = list(mailboxes)
-        self._dels  = set()
+        self._dels = set()
         self._users = dict(opts.get('users', ()))
         self._apopc = None
 
         self.allow_delete = opts.get('allow_delete', False)
-        self.allow_apop   = opts.get('allow_apop', False)
+        self.allow_apop = opts.get('allow_apop', False)
 
-        TCPServer.__init__(self, (self._host, port),
-                           POP3Handler)
+        TCPServer.__init__(self, (self._host, port), POP3Handler)
 
     def _diag(self, msg, *args):
         if self._debug:
@@ -206,14 +205,13 @@ class POP3Server (TCPServer):
         self.server_activate()
         self.running = True
         try:
-            self._diag('* SERVER STARTING at %s %s',
-                       self._host, self._port)
+            self._diag('* SERVER STARTING at %s %s', self._host, self._port)
 
             while self.running:
                 # Choose a new APOP banner for each new session.
                 ident = int(random.random() * os.getpid() * 10)
-                self._apopc = '<{0}.{1}@{2}>'.format(
-                    ident, int(time.time()), socket.gethostname())
+                self._apopc = '<{0}.{1}@{2}>'.format(ident, int(time.time()),
+                                                     socket.gethostname())
 
                 self.handle_request()
 
@@ -258,7 +256,7 @@ class POP3Server (TCPServer):
 
     def mail_mark_deleted(self, pos):
         """[client] Mark the specified message as "deleted"."""
-        self.mail_get_index(pos) # range test
+        self.mail_get_index(pos)  # range test
         self._dels.add(pos)
 
     def mail_get_deleted(self):
@@ -276,9 +274,9 @@ class POP3Server (TCPServer):
                 return
 
         if os.path.isdir(path):
-            box = Maildir(path)     # may fail
+            box = Maildir(path)  # may fail
         else:
-            box = MailboxFile(path) # may fail
+            box = MailboxFile(path)  # may fail
         self._boxes.append(box)
 
     def is_mail_deleted(self, pos):
@@ -291,8 +289,8 @@ class POP3Server (TCPServer):
 
     def is_auth_ok(self, user, pw):
         """[client] Check user authentication."""
-        return len(self._users) == 0 or (
-            user in self._users and self._users[user] == pw)
+        return len(self._users) == 0 or (user in self._users
+                                         and self._users[user] == pw)
 
     def is_apop_ok(self, user, response):
         """[client] Check APOP authentication."""
@@ -311,12 +309,12 @@ class POP3Server (TCPServer):
         return self._apopc
 
 
-class StateError (Exception):
+class StateError(Exception):
     """An exception used internally by POP3Handler."""
     pass
 
 
-class POP3Handler (StreamRequestHandler):
+class POP3Handler(StreamRequestHandler):
     """Implements a very simple POP3 service.
 
     In addition to the usual POP3 suite, this handler implements the
@@ -368,7 +366,7 @@ class POP3Handler (StreamRequestHandler):
             raise StateError
 
     def send_data(self, data):
-        esc  = re.compile(r'^\.', re.MULTILINE | re.UNICODE)
+        esc = re.compile(r'^\.', re.MULTILINE | re.UNICODE)
         text = esc.sub('..', data.replace('\n', '\r\n'))
         self.wfile.write('+OK %d octets\r\n' % len(text))
         self.wfile.write(text)
@@ -382,7 +380,7 @@ class POP3Handler (StreamRequestHandler):
 
     def cmd_QUIT(self, cmd, data):
         self.check_args(cmd, data, 0, 0)
-        self.state = 'UPDATE' # triggers exit from handler loop
+        self.state = 'UPDATE'  # triggers exit from handler loop
         self._diag('- Received QUIT command, entering UPDATE state.')
 
     def cmd_USER(self, cmd, data):
@@ -391,7 +389,7 @@ class POP3Handler (StreamRequestHandler):
             self.check_args(cmd, data, 1, 1)
             if self.server.is_user_ok(data):
                 self.wfile.write('+OK %s\r\n' % data)
-                self.state  = 'USER'
+                self.state = 'USER'
                 self.userid = data
             else:
                 self.wfile.write('-ERR User invalid\r\n')
@@ -413,7 +411,8 @@ class POP3Handler (StreamRequestHandler):
 
     def cmd_APOP(self, cmd, data):
         if not self.server.allow_apop:
-            self.cmd_unknown(cmd, data); return
+            self.cmd_unknown(cmd, data)
+            return
         self.check_state(cmd, data, 'AUTH')
         self.userid, response = self.check_args(cmd, data, 2, 2)
         if self.server.is_apop_ok(self.userid, response):
@@ -428,9 +427,9 @@ class POP3Handler (StreamRequestHandler):
     def cmd_STAT(self, cmd, data):
         self.check_state(cmd, data, 'TRANS')
         self.check_args(cmd, data, 0, 0)
-        self.wfile.write('+OK %d %d\r\n' %
-                         (self.server.mail_total_count(),
-                          self.server.mail_total_size()))
+        self.wfile.write(
+            '+OK %d %d\r\n' %
+            (self.server.mail_total_count(), self.server.mail_total_size()))
 
     def list_cmd(extract):
         def do_command(self, cmd, data):
@@ -441,14 +440,15 @@ class POP3Handler (StreamRequestHandler):
                 elt = extract(msg)
                 self.wfile.write('+OK %d %s\r\n' % (args[0], elt))
             else:
-                self.wfile.write('+OK %d messages (%d octets)\r\n' % (
-                    self.server.mail_total_count(),
-                    self.server.mail_total_size()))
+                self.wfile.write('+OK %d messages (%d octets)\r\n' %
+                                 (self.server.mail_total_count(),
+                                  self.server.mail_total_size()))
                 for pos, msg in enumerate(self.server.mail_get_all()):
                     if not self.server.is_mail_deleted(pos):
                         elt = extract(msg)
                         self.wfile.write('%d %s\r\n' % (pos + 1, elt))
                 self.wfile.write('.\r\n')
+
         return do_command
 
     cmd_LIST = list_cmd(lambda m: m.poplen)
@@ -457,13 +457,13 @@ class POP3Handler (StreamRequestHandler):
     def cmd_RETR(self, cmd, data):
         self.check_state(cmd, data, 'TRANS')
         args = self.parse_args(self.check_args(cmd, data, 1, 1))
-        msg  = self.check_message(args[0] - 1)
+        msg = self.check_message(args[0] - 1)
         self.send_data(msg.content)
 
     def cmd_DELE(self, cmd, data):
         self.check_state(cmd, data, 'TRANS')
         args = self.parse_args(self.check_args(cmd, data, 1, 1))
-        msg  = self.check_message(args[0] - 1)
+        msg = self.check_message(args[0] - 1)
         self.server.mail_mark_deleted(args[0] - 1)
         self.wfile.write('+OK Message %d deleted\r\n' % args[0])
         self._diag('- Marked message %d for deletion.', args[0])
@@ -483,7 +483,7 @@ class POP3Handler (StreamRequestHandler):
             self.wfile.write('-ERR Invalid argument\r\n')
             return
 
-        msg  = self.check_message(msgid - 1)
+        msg = self.check_message(msgid - 1)
         self.send_data(msg.get_top(n))
 
     def cmd_CAPA(self, cmd, data):
@@ -536,13 +536,13 @@ class POP3Handler (StreamRequestHandler):
             self._diag('- Client connected, entering AUTH state.')
 
             while self.state != 'UPDATE':
-                line      = self.rfile.readline()
-                args      = line.rstrip().split(' ', 1)
-                cmd       = args[0]
-                data      = ''
+                line = self.rfile.readline()
+                args = line.rstrip().split(' ', 1)
+                cmd = args[0]
+                data = ''
                 if len(args) > 1:
                     data = args[1]
-                hname     = 'cmd_%s' % cmd.upper()
+                hname = 'cmd_%s' % cmd.upper()
 
                 try:
                     getattr(self, hname, self.cmd_unknown)(cmd, data)
@@ -556,8 +556,8 @@ class POP3Handler (StreamRequestHandler):
             # of the POP3 protocol.  Since this is read-only, deleted
             # messages will not actually be removed; the POP3 RFC
             # wants this to be an error.
-            if (len(self.server.mail_get_deleted()) == 0 or
-                self.server.allow_delete):
+            if (len(self.server.mail_get_deleted()) == 0
+                    or self.server.allow_delete):
                 self.wfile.write('+OK Goodnight sweet prince\r\n')
             else:
                 self.wfile.write('-ERR Unable to delete messages\r\n')
@@ -573,7 +573,7 @@ class POP3Handler (StreamRequestHandler):
 
 
 def main(argv):
-    def usage(short = True):
+    def usage(short=True):
         """Print a human-readable usage message."""
         print >> sys.stderr, "Usage: eyepopper.py [options] mailbox*"
         if short:
@@ -611,21 +611,21 @@ delimited by carriage returns.
     # Process command-line options
     try:
         opts, args = getopt.gnu_getopt(
-            argv, 'haEp:qu:', ('help', 'apop', 'noerror',
-                               'port=', 'quiet', 'user='))
+            argv, 'haEp:qu:',
+            ('help', 'apop', 'noerror', 'port=', 'quiet', 'user='))
     except getopt.GetoptError, e:
         print >> sys.stderr, "Error: %s" % e
         usage()
         return 1
 
-    listen_port  = int(os.getenv('POP_PORT', 1110))
-    debugging    = True
-    legal_users  = {}
+    listen_port = int(os.getenv('POP_PORT', 1110))
+    debugging = True
+    legal_users = {}
     allow_delete = False
-    allow_apop   = False
+    allow_apop = False
     for opt, arg in opts:
         if opt in ('-h', '--help'):
-            usage(short = False)
+            usage(short=False)
             return 0
         elif opt in ('-a', '--apop'):
             allow_apop = True
@@ -652,7 +652,7 @@ delimited by carriage returns.
             name, pw = line.strip().split(':', 1)
             legal_users[name] = pw
         except ValueError:
-            pass # skip quietly
+            pass  # skip quietly
 
     # Load mailbox files
     try:
@@ -671,9 +671,8 @@ delimited by carriage returns.
         print >> sys.stderr, "EyePopper v. %s by M. J. Fromberger" % __version__
         if boxes:
             print >> sys.stderr, "Mailboxes:\n -",
-            print >> sys.stderr, '\n - '.join('%s (%d msg)' %
-                                              (b.mailbox_path(), len(b))
-                                              for b in boxes)
+            print >> sys.stderr, '\n - '.join(
+                '%s (%d msg)' % (b.mailbox_path(), len(b)) for b in boxes)
             print >> sys.stderr
         if legal_users:
             print >> sys.stderr, "Legal users: %s\n" % ', '.join(legal_users)
@@ -682,8 +681,12 @@ delimited by carriage returns.
         if allow_apop:
             print >> sys.stderr, "Enabled: APOP"
 
-    pop = POP3Server(listen_port, boxes, debug = debugging, users = legal_users,
-                     allow_delete = allow_delete, allow_apop = allow_apop)
+    pop = POP3Server(listen_port,
+                     boxes,
+                     debug=debugging,
+                     users=legal_users,
+                     allow_delete=allow_delete,
+                     allow_apop=allow_apop)
     pop.run()
 
     return 0
