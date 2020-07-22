@@ -511,7 +511,7 @@ class POP3Handler(StreamRequestHandler):
             self.server.mail_add_mailbox(data)
             self.wfile.write('+OK Mailbox added %s\r\n' % data)
             self._diag('- Client requested mailbox "%s".', data)
-        except (OSError, IOError), e:
+        except (OSError, IOError) as e:
             self.wfile.write('-ERR Mailbox not added (%s)\r\n' % e.strerror)
 
     def handle(self):
@@ -565,7 +565,7 @@ class POP3Handler(StreamRequestHandler):
 
             self._diag('* REQUEST COMPLETE\n')
 
-        except socket.error, e:
+        except socket.error as e:
             pass
 
         self.wfile.close()
@@ -613,7 +613,7 @@ delimited by carriage returns.
         opts, args = getopt.gnu_getopt(
             argv, 'haEp:qu:',
             ('help', 'apop', 'noerror', 'port=', 'quiet', 'user='))
-    except getopt.GetoptError, e:
+    except getopt.GetoptError as e:
         print >> sys.stderr, "Error: %s" % e
         usage()
         return 1
@@ -662,7 +662,7 @@ delimited by carriage returns.
                 boxes.append(Maildir(path))
             else:
                 boxes.append(MailboxFile(path))
-    except (OSError, IOError), e:
+    except (OSError, IOError) as e:
         print >> sys.stderr, "Error: %s" % e
         return 2
 
