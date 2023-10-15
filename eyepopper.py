@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 ##
 ## Name:     eyepopper.py
@@ -29,10 +29,11 @@
 ##
 from __future__ import with_statement
 
-from SocketServer import TCPServer, StreamRequestHandler
+from socketserver import TCPServer, StreamRequestHandler
 import getopt, hashlib, os, random, re, socket, sys, time
 
-__version__ = "1.4"
+__version__ = "1.5"
+MBOX_ENCODING = 'latin-1'
 
 
 class MessageBase(object):
@@ -52,6 +53,7 @@ class MessageBase(object):
     .head     -- the headers of the message (computed)
     .body     -- the body of the message (computed)
     """
+
     def __init__(self, start, end):
         self.start = start
         self.end = end
@@ -62,8 +64,8 @@ class MessageBase(object):
         self.bodypos = start + bmark.end()
 
         hash = hashlib.md5()
-        hash.update(text)
-        hash.update(self._path)
+        hash.update(text.encode(MBOX_ENCODING))
+        hash.update(self._path.encode('utf-8'))
 
         self.uid = hash.hexdigest()
 
@@ -93,6 +95,7 @@ class MessageBase(object):
 
 class MailContainer(object):
     """Abstracts a Maildir mailbox stored on disk."""
+
     def __init__(self, path):
         """Constructs a new mailbox abstraction around the given
         filesystem object, a file or a directory.
@@ -123,24 +126,26 @@ class MailContainer(object):
 
 class MailboxFile(MailContainer):
     """Abstracts a Unix mailbox file stored on disk."""
+
     def build_index(self):
         """Construct an index of the contents of the associated disk file."""
-        ex = re.compile(r'^(From \w+.*\n)\w+:', re.MULTILINE | re.UNICODE)
-        with file(self._path, 'rt') as fp:
-            data = fp.read()
+        ex = re.compile(r'^(From \w+.*\n)\w+', re.MULTILINE | re.UNICODE)
+        with open(self._path, 'rb') as fp:
+            data = fp.read().decode(MBOX_ENCODING)
 
             class Message(MessageBase):
                 _data = data
                 _path = self._path
 
-            msgs = [{}]  # sentinel
+            msgs = [{'start': 0}]  # sentinel
 
             for msg in ex.finditer(data):
-                msgs[-1]['end'] = msg.start() - 1
+                msgs[-1]['end'] = msg.start()
                 msgs.append({'start': msg.start() + len(msg.group(1))})
 
             msgs[-1]['end'] = len(data)
-            msgs.pop(0)
+            if len(msgs) > 1:
+                msgs.pop(0)
 
             self._msgs = list(Message(m['start'], m['end']) for m in msgs)
             self._data = data
@@ -149,11 +154,13 @@ class MailboxFile(MailContainer):
 class Maildir(MailContainer):
     """Abstracts a Maildir mailbox in a directory.
     """
+
     def build_index(self):
         cdir = os.path.join(self._path, 'cur')
         ndir = os.path.join(self._path, 'new')
 
         class Message(MessageBase):
+
             def __init__(self, data, path):
                 self._data = data
                 self._path = path
@@ -163,7 +170,7 @@ class Maildir(MailContainer):
         for base in (cdir, ndir):
             for fname in os.listdir(base):
                 fpath = os.path.join(base, fname)
-                with file(fpath, 'r') as fp:
+                with open(fpath, 'r') as fp:
                     msgs.append(Message(fp.read(), fpath))
 
         self._msgs = msgs
@@ -198,7 +205,7 @@ class POP3Server(TCPServer):
 
     def _diag(self, msg, *args):
         if self._debug:
-            print >> sys.stderr, msg % args
+            print(msg % args, file=sys.stderr)
 
     def run(self):
         """Run the server until it is killed or closed."""
@@ -217,7 +224,7 @@ class POP3Server(TCPServer):
 
             self._diag('* SERVER SHUTTING DOWN')
         except KeyboardInterrupt:
-            print >> sys.stderr, "\n>> INTERRUPT <<"
+            print("\n>> INTERRUPT <<", file=sys.stderr)
         finally:
             self.server_close()
 
@@ -326,16 +333,19 @@ class POP3Handler(StreamRequestHandler):
     welcome_banner = 'POP3 server ready'
     want_shutdown = False
 
+    def _put(self, text):
+        self.wfile.write(text.encode('utf-8'))
+
     def cmd_unknown(self, cmd, data):
         """Handle unknown commands."""
-        self.wfile.write('-ERR Command not understood\r\n')
+        self._put('-ERR Command not understood\r\n')
 
     def _diag(self, msg, *args):
         self.server._diag(msg, *args)
 
     def check_state(self, cmd, data, state):
         if self.state != state:
-            self.wfile.write('-ERR Invalid command\r\n')
+            self._put('-ERR Invalid command\r\n')
             raise StateError
 
     def check_args(self, cmd, data, min, max):
@@ -344,39 +354,39 @@ class POP3Handler(StreamRequestHandler):
         if min <= len(args) and (max < 0 or len(args) <= max):
             return args
         else:
-            self.wfile.write('-ERR Wrong number of arguments (%s)\r\n' % cmd)
+            self._put('-ERR Wrong number of arguments (%s)\r\n' % cmd)
             raise StateError
 
     def parse_args(self, args):
         try:
             return list(int(x) for x in args)
         except ValueError:
-            self.wfile.write('-ERR Invalid argument\r\n')
+            self._put('-ERR Invalid argument\r\n')
             raise StateError
 
     def check_message(self, pos):
         try:
             msg = self.server.mail_get_index(pos)
             if self.server.is_mail_deleted(pos):
-                self.wfile.write('-ERR Message is deleted\r\n')
+                self._put('-ERR Message is deleted\r\n')
                 raise StateError
             return msg
         except IndexError:
-            self.wfile.write('-ERR Message out of range\r\n')
+            self._put('-ERR Message out of range\r\n')
             raise StateError
 
     def send_data(self, data):
         esc = re.compile(r'^\.', re.MULTILINE | re.UNICODE)
         text = esc.sub('..', data.replace('\n', '\r\n'))
-        self.wfile.write('+OK %d octets\r\n' % len(text))
-        self.wfile.write(text)
+        self._put('+OK %d octets\r\n' % len(text))
+        self._put(text)
         if not text.endswith('\r\n'):
-            self.wfile.write('\r\n')
-        self.wfile.write('.\r\n')
+            self._put('\r\n')
+        self._put('.\r\n')
 
     def cmd_NOOP(self, cmd, data):
         self.check_args(cmd, data, 0, 0)
-        self.wfile.write('+OK Nothing accomplished\r\n')
+        self._put('+OK Nothing accomplished\r\n')
 
     def cmd_QUIT(self, cmd, data):
         self.check_args(cmd, data, 0, 0)
@@ -388,11 +398,11 @@ class POP3Handler(StreamRequestHandler):
             self.check_state(cmd, data, 'AUTH')
             self.check_args(cmd, data, 1, 1)
             if self.server.is_user_ok(data):
-                self.wfile.write('+OK %s\r\n' % data)
+                self._put('+OK %s\r\n' % data)
                 self.state = 'USER'
                 self.userid = data
             else:
-                self.wfile.write('-ERR User invalid\r\n')
+                self._put('-ERR User invalid\r\n')
         except StateError:
             if self.state == 'USER':
                 self.state = 'AUTH'
@@ -401,12 +411,12 @@ class POP3Handler(StreamRequestHandler):
         self.check_state(cmd, data, 'USER')
         self.check_args(cmd, data, 1, 1)
         if self.server.is_auth_ok(self.userid, data):
-            self.wfile.write('+OK Ready\r\n')
+            self._put('+OK Ready\r\n')
             self.state = 'TRANS'
             self._diag('- Authenticated "%s", entering TRANSACTION state.',
                        self.userid)
         else:
-            self.wfile.write('-ERR Access denied\r\n')
+            self._put('-ERR Access denied\r\n')
             self.state = 'AUTH'
 
     def cmd_APOP(self, cmd, data):
@@ -416,38 +426,39 @@ class POP3Handler(StreamRequestHandler):
         self.check_state(cmd, data, 'AUTH')
         self.userid, response = self.check_args(cmd, data, 2, 2)
         if self.server.is_apop_ok(self.userid, response):
-            self.wfile.write('+OK Ready\r\n')
+            self._put('+OK Ready\r\n')
             self.state = 'TRANS'
             self._diag('- Authenticated "%s", entering TRANSACTION state.',
                        self.userid)
         else:
-            self.wfile.write('-ERR Access denied\r\n')
+            self._put('-ERR Access denied\r\n')
             self.state = 'AUTH'
 
     def cmd_STAT(self, cmd, data):
         self.check_state(cmd, data, 'TRANS')
         self.check_args(cmd, data, 0, 0)
-        self.wfile.write(
+        self._put(
             '+OK %d %d\r\n' %
             (self.server.mail_total_count(), self.server.mail_total_size()))
 
     def list_cmd(extract):
+
         def do_command(self, cmd, data):
             self.check_state(cmd, data, 'TRANS')
             args = self.parse_args(self.check_args(cmd, data, 0, 1))
             if args:
                 msg = self.check_message(args[0] - 1)
                 elt = extract(msg)
-                self.wfile.write('+OK %d %s\r\n' % (args[0], elt))
+                self._put('+OK %d %s\r\n' % (args[0], elt))
             else:
-                self.wfile.write('+OK %d messages (%d octets)\r\n' %
-                                 (self.server.mail_total_count(),
-                                  self.server.mail_total_size()))
+                self._put('+OK %d messages (%d octets)\r\n' %
+                          (self.server.mail_total_count(),
+                           self.server.mail_total_size()))
                 for pos, msg in enumerate(self.server.mail_get_all()):
                     if not self.server.is_mail_deleted(pos):
                         elt = extract(msg)
-                        self.wfile.write('%d %s\r\n' % (pos + 1, elt))
-                self.wfile.write('.\r\n')
+                        self._put('%d %s\r\n' % (pos + 1, elt))
+                self._put('.\r\n')
 
         return do_command
 
@@ -465,14 +476,14 @@ class POP3Handler(StreamRequestHandler):
         args = self.parse_args(self.check_args(cmd, data, 1, 1))
         msg = self.check_message(args[0] - 1)
         self.server.mail_mark_deleted(args[0] - 1)
-        self.wfile.write('+OK Message %d deleted\r\n' % args[0])
+        self._put('+OK Message %d deleted\r\n' % args[0])
         self._diag('- Marked message %d for deletion.', args[0])
 
     def cmd_RSET(self, cmd, data):
         self.check_state(cmd, data, 'TRANS')
         self.check_args(cmd, data, 0, 0)
         self.server.mail_clear_deleted()
-        self.wfile.write('+OK Reset\r\n')
+        self._put('+OK Reset\r\n')
         self._diag('- Reset deleted messages list.')
 
     def cmd_TOP(self, cmd, data):
@@ -480,7 +491,7 @@ class POP3Handler(StreamRequestHandler):
         msgid, n = self.parse_args(self.check_args(cmd, data, 2, 2))
 
         if n < 0:
-            self.wfile.write('-ERR Invalid argument\r\n')
+            self._put('-ERR Invalid argument\r\n')
             return
 
         msg = self.check_message(msgid - 1)
@@ -488,31 +499,31 @@ class POP3Handler(StreamRequestHandler):
 
     def cmd_CAPA(self, cmd, data):
         self.check_args(cmd, data, 0, 0)
-        self.wfile.write('+OK Capability list follows\r\n')
+        self._put('+OK Capability list follows\r\n')
         for cap in self.server.capabilities:
-            self.wfile.write('%s\r\n' % cap)
-        self.wfile.write('IMPLEMENTATION eyepopper.py v.%s\r\n' % __version__)
-        self.wfile.write('.\r\n')
+            self._put('%s\r\n' % cap)
+        self._put('IMPLEMENTATION eyepopper.py v.%s\r\n' % __version__)
+        self._put('.\r\n')
 
     def cmd_SHUTDOWN(self, cmd, data):
         self.check_state(cmd, data, 'TRANS')
         self.check_args(cmd, data, 0, 0)
         self.want_shutdown = True
-        self.wfile.write('+OK Server will shut down at QUIT.\r\n')
+        self._put('+OK Server will shut down at QUIT.\r\n')
         self._diag('- Client requested server SHUTDOWN.')
 
     def cmd_ADDBOX(self, cmd, data):
         self.check_state(cmd, data, 'TRANS')
         if not data or data.isspace():
-            self.wfile.write('-ERR Invalid argument\r\n')
+            self._put('-ERR Invalid argument\r\n')
             return
 
         try:
             self.server.mail_add_mailbox(data)
-            self.wfile.write('+OK Mailbox added %s\r\n' % data)
+            self._put('+OK Mailbox added %s\r\n' % data)
             self._diag('- Client requested mailbox "%s".', data)
         except (OSError, IOError) as e:
-            self.wfile.write('-ERR Mailbox not added (%s)\r\n' % e.strerror)
+            self._put('-ERR Mailbox not added (%s)\r\n' % e.strerror)
 
     def handle(self):
         """Required entry point for use with SocketServer.  Dispatches
@@ -528,15 +539,15 @@ class POP3Handler(StreamRequestHandler):
         it uses state on the server object without locks.
         """
         try:
-            self.wfile.write('+OK %s' % self.welcome_banner)
+            self._put('+OK %s' % self.welcome_banner)
             if self.server.allow_apop:
-                self.wfile.write(' %s' % self.server.get_apop_tag())
-            self.wfile.write('\r\n')
+                self._put(' %s' % self.server.get_apop_tag())
+            self._put('\r\n')
             self.state = 'AUTH'
             self._diag('- Client connected, entering AUTH state.')
 
             while self.state != 'UPDATE':
-                line = self.rfile.readline()
+                line = self.rfile.readline().decode('utf-8')
                 args = line.rstrip().split(' ', 1)
                 cmd = args[0]
                 data = ''
@@ -558,9 +569,9 @@ class POP3Handler(StreamRequestHandler):
             # wants this to be an error.
             if (len(self.server.mail_get_deleted()) == 0
                     or self.server.allow_delete):
-                self.wfile.write('+OK Goodnight sweet prince\r\n')
+                self._put('+OK Goodnight sweet prince\r\n')
             else:
-                self.wfile.write('-ERR Unable to delete messages\r\n')
+                self._put('-ERR Unable to delete messages\r\n')
                 self.server.mail_clear_deleted()
 
             self._diag('* REQUEST COMPLETE\n')
@@ -573,13 +584,14 @@ class POP3Handler(StreamRequestHandler):
 
 
 def main(argv):
+
     def usage(short=True):
         """Print a human-readable usage message."""
-        print >> sys.stderr, "Usage: eyepopper.py [options] mailbox*"
+        print("Usage: eyepopper.py [options] mailbox*", file=sys.stderr)
         if short:
-            print >> sys.stderr, " [use -h or --help for options]\n"
+            print(" [use -h or --help for options]\n", file=sys.stderr)
         else:
-            print >> sys.stderr, """
+            print("""
 This program implements a local read-only POP3 server that serves up
 messages stored in plain text mailbox files or directories in Maildir
 format.  It can be used to import such messages into clients that do
@@ -606,7 +618,8 @@ specified are granted access.  The name and password are separated by
 a colon.  Username and password combinations can also be supplied via
 the POP_USERS environment variable, where multiple entries are
 delimited by carriage returns.
-""" % listen_port
+""" % listen_port,
+                  file=sys.stderr)
 
     # Process command-line options
     try:
@@ -614,7 +627,7 @@ delimited by carriage returns.
             argv, 'haEp:qu:',
             ('help', 'apop', 'noerror', 'port=', 'quiet', 'user='))
     except getopt.GetoptError as e:
-        print >> sys.stderr, "Error: %s" % e
+        print("Error: %s" % e, file=sys.stderr)
         usage()
         return 1
 
@@ -640,7 +653,8 @@ delimited by carriage returns.
                 name, pw = arg.strip().split(':', 1)
                 legal_users[name] = pw
             except ValueError:
-                print >> sys.stderr, "Error: Invalid user specification: %s" % arg
+                print("Error: Invalid user specification: %s" % arg,
+                      file=sys.stderr)
                 usage()
                 return 1
         else:
@@ -663,23 +677,26 @@ delimited by carriage returns.
             else:
                 boxes.append(MailboxFile(path))
     except (OSError, IOError) as e:
-        print >> sys.stderr, "Error: %s" % e
+        print("Error: %s" % e, file=sys.stderr)
         return 2
 
     # Start up server
     if debugging:
-        print >> sys.stderr, "EyePopper v. %s by M. J. Fromberger" % __version__
+        print("EyePopper v. %s by M. J. Fromberger" % __version__,
+              file=sys.stderr)
         if boxes:
-            print >> sys.stderr, "Mailboxes:\n -",
-            print >> sys.stderr, '\n - '.join(
-                '%s (%d msg)' % (b.mailbox_path(), len(b)) for b in boxes)
-            print >> sys.stderr
+            sys.stderr.write("Mailboxes:\n -")
+            print("\n - ".join("%s (%d msg)" % (b.mailbox_path(), len(b))
+                               for b in boxes),
+                  file=sys.stderr)
+            sys.stderr.write("\n")
         if legal_users:
-            print >> sys.stderr, "Legal users: %s\n" % ', '.join(legal_users)
+            print("Legal users: %s\n" % ", ".join(legal_users),
+                  file=sys.stderr)
         if allow_delete:
-            print >> sys.stderr, "Enabled: Simulated deletion"
+            print("Enabled: Simulated deletion", file=sys.stderr)
         if allow_apop:
-            print >> sys.stderr, "Enabled: APOP"
+            print("Enabled: APOP", file=sys.stderr)
 
     pop = POP3Server(listen_port,
                      boxes,
