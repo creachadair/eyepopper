@@ -60,8 +60,10 @@ class MessageBase(object):
 
         text = self._data[start:end]
         self.poplen = (end - start) + len(re.findall(r'\n', text))
+        self.bodypos = end
         bmark = re.search(r'\n\n', text)
-        self.bodypos = start + bmark.end()
+        if bmark:
+            self.bodypos = start + bmark.end()
 
         hash = hashlib.md5()
         hash.update(text.encode(MBOX_ENCODING))
