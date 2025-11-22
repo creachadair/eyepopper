@@ -310,7 +310,7 @@ class POP3Server(TCPServer):
         else:
             t = self.get_apop_tag() + self._users[user]
             m = hashlib.md5()
-            m.update(t)
+            m.update(t.encode('utf-8'))
             return m.hexdigest().lower() == response.lower()
 
     def get_apop_tag(self):
