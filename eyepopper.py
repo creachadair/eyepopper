@@ -619,7 +619,7 @@ option is used one or more times, only the user/password combinations
 specified are granted access.  The name and password are separated by
 a colon.  Username and password combinations can also be supplied via
 the POP_USERS environment variable, where multiple entries are
-delimited by carriage returns.
+delimited by newlines (Unicode 10).
 """ % listen_port,
                   file=sys.stderr)
 
